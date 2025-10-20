@@ -3,90 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GearGuide Fashion Platform (Placeholder Name)</title>
+    <title>Fashion Platform</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="container">
-        <h1>GearGuide: Custom Fashion Shopping (Placeholder Name)</h1>
-        
-        <!-- User Shopping Form -->
-        <h2 class="mt-4">Find Your Perfect Outfit</h2>
-        <form method="post" enctype="multipart/form-data" class="mt-2">
-            <div class="form-group">
-                <label for="size">Your Size:</label>
-                <input type="text" name="size" class="form-control" placeholder="M" required>
+    <div class="container-fluid">
+        <header class="bg-primary text-white p-3 mb-4">
+            <h1 class="display-4">Fashion Platform</h1>
+            <div class="input-group mb-3" style="max-width: 500px;">
+                <input type="text" class="form-control" id="filterInput" placeholder="Search (e.g., black shorts no print)" onkeyup="filterClothes()">
+                <button class="btn btn-warning" onclick="filterClothes()">Filter</button>
             </div>
-            <div class="form-group">
-                <label for="preferences">Preferences (e.g., plain black, no print, shorts, no shoes, no hat, use photo hat):</label>
-                <input type="text" name="preferences" class="form-control" placeholder="plain black, no print, shorts, no shoes, no hat, use photo hat" required>
-            </div>
-            <div class="form-group">
-                <label for="photo">Upload Photo for Avatar:</label>
-                <input type="file" name="photo" class="form-control-file" accept="image/*">
-            </div>
-            <button type="submit" class="btn btn-primary">Get Suggestions</button>
-        </form>
-
-        <!-- Brand Upload Form -->
-        <h2 class="mt-4">Small Brands: Upload Your Line</h2>
-        <form method="post" enctype="multipart/form-data" class="mt-2">
-            <div class="form-group">
-                <label for="brand_name">Brand Name:</label>
-                <input type="text" name="brand_name" class="form-control" placeholder="e.g., Eco Tee - Brand A" required>
-            </div>
-            <div class="form-group">
-                <label for="price">Price ($):</label>
-                <input type="number" name="price" class="form-control" step="0.01" required>
-            </div>
-            <div class="form-group">
-                <label for="color">Color:</label>
-                <input type="text" name="color" class="form-control" placeholder="e.g., Black" required>
-            </div>
-            <div class="form-group">
-                <label for="sizes">Sizes (comma-separated):</label>
-                <input type="text" name="sizes" class="form-control" placeholder="e.g., S,M,L" required>
-            </div>
-            <div class="form-group">
-                <label for="image">Upload Image:</label>
-                <input type="file" name="image" class="form-control-file" accept="image/*" required>
-            </div>
-            <div class="form-group">
-                <label for="affiliate_link">Affiliate Link:</label>
-                <input type="text" name="affiliate_link" class="form-control" placeholder="e.g., https://flexoffers.com/tee?tag=yourid">
-            </div>
-            <div class="form-group">
-                <label for="brand_story">Brand Story:</label>
-                <textarea name="brand_story" class="form-control" placeholder="e.g., Sustainable fashion from a 20k IG creator"></textarea>
-            </div>
-            <button type="submit" class="btn btn-success">Upload Product</button>
-        </form>
-
-        {% if kit %}
-            <h2 class="mt-4">Suggested Fashion Kit</h2>
-            {% for item in kit %}
-                <div class="card">
-                    <h3>{{ item.name }}</h3>
-                    <p>Price: ${{ item.price }}</p>
-                    <p>Sizes: {{ ', '.join(item.sizes) }}</p>
-                    <p>Color: {{ item.color }}</p>
-                    <p>Image: <img src="{{ item.image_url }}" alt="{{ item.name }}" width="200"></p>
-                    <p>Try-On: {{ item.try_on }}</p>
-                    <p>Brand Story: {{ item.brand_story }}</p>
-                    <p>Buy here: <a href="{{ item.link }}" target="_blank">{{ item.link }}</a></p>
+        </header>
+        <div class="row">
+            <!-- Clothes Column (Left) -->
+            <div class="col-md-6">
+                <div class="row" id="clothesGrid">
+                    {% for item in clothes %}
+                        <div class="col-12 mb-4">
+                            <div class="card h-100">
+                                <img src="{{ item.image_url }}" class="card-img-top" alt="{{ item.name }}" style="height: 200px; object-fit: cover;">
+                                <div class="card-body">
+                                    <h5 class="card-title">{{ item.name }}</h5>
+                                    <p class="card-text">Price: ${{ item.price }}</p>
+                                    <p class="card-text">Color: {{ item.color }}</p>
+                                    <p class="card-text">Sizes: {{ item.sizes }}</p>
+                                    <p class="card-text">Brand Story: {{ item.brand_story }}</p>
+                                    <a href="{{ item.affiliate_link }}" target="_blank" class="btn btn-outline-primary">Buy Now</a>
+                                    <a href="{{ url_for('try_on', item_id=item.id, user_photo=user_photo) }}" class="btn btn-warning rounded-circle float-end" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">Try On</a>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
                 </div>
-            {% endfor %}
-            <p>Total Price: ${{ total_price }}</p>
-            {% if total_price > 150 %}
-                <p class="text-warning">Warning: Total exceeds budget slightly.</p>
-            {% endif %}
-        {% else %}
-            <p>No matching kit. Adjust preferences.</p>
-        {% endif %}
-        {% if user_photo %}
-            <p>Your Avatar: <img src="{{ user_photo }}" alt="User Avatar" width="150"></p>
-        {% endif %}
+            </div>
+            <!-- Avatar Column (Right) -->
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Your Avatar</h5>
+                        <img src="{{ user_photo }}" alt="User Avatar" class="img-fluid" style="max-height: 400px; object-fit: contain;">
+                        <form method="post" enctype="multipart/form-data" class="mt-3">
+                            <div class="form-group">
+                                <label for="photo">Upload New Photo</label>
+                                <input type="file" name="photo" class="form-control-file" accept="image/*">
+                            </div>
+                            <button type="submit" class="btn btn-primary mt-2">Update Avatar</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
+    <script>
+        function filterClothes() {
+            const input = document.getElementById('filterInput').value.toLowerCase();
+            const cards = document.getElementsByClassName('card');
+            for (let card of cards) {
+                const text = card.textContent.toLowerCase();
+                card.style.display = text.includes(input) ? '' : 'none';
+            }
+        }
+    </script>
 </body>
 </html>

@@ -1,7 +1,7 @@
-# Full code for fashion platform prototype (small brands, AR try-on, custom kits).
-# Run with: python app.py (visit localhost:5000 or fashion-platform.til232.github.io later).
-# Notes: Uses SQLite3 (built-in) for clothes database. AR sim as text (upgrade to GlamAR API). Rename placeholder later.
-# Fixed venv issue for Python 3.14.0 on Mac.
+# Full code for Fashion Platform prototype (small brands, AR try-on, custom filtering).
+# Run with: python app.py or python3 app.py (visit localhost:5000 or fashion-platform.til232.github.io later).
+# Notes: Uses SQLite for clothes database. AI filter via keyword match. AR sim as text (upgrade to GlamAR API).
+# Modern design with avatar on right, clothes on left, "Try On" button.
 
 from flask import Flask, request, render_template, send_from_directory, redirect, url_for
 import os
@@ -13,7 +13,7 @@ app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Database setup (SQLite3 for clothes from small brands).
+# Database setup (SQLite for clothes from small brands).
 conn = sqlite3.connect('fashion_db.db', check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute('''CREATE TABLE IF NOT EXISTS clothes
@@ -24,6 +24,7 @@ conn.commit()
 sample_data = [
     ('Eco Tee - Brand A (15k followers)', 29.99, 'Black', 'S,M,L', '/uploads/tee.jpg', 'https://flexoffers.com/tee?tag=yourid', 'Brand A: Sustainable cotton from upcycled fabrics, launched by a 20k IG creator.'),
     ('Vintage Jacket - Brand B (50k followers)', 59.99, 'Blue', 'M,L', '/uploads/jacket.jpg', 'https://flexoffers.com/jacket?tag=yourid', 'Brand B: Retro vibes from a 60k TikTok designer, eco-conscious production.'),
+    ('Casual Shorts - Brand C (30k followers)', 34.99, 'Black', 'S,M', '/uploads/shorts.jpg', 'https://flexoffers.com/shorts?tag=yourid', 'Brand C: Comfortable designs from a 30k IG artisan.'),
 ]
 for data in sample_data:
     cursor.execute('''INSERT OR IGNORE INTO clothes (name, price, color, sizes, image_url, affiliate_link, brand_story) VALUES (?, ?, ?, ?, ?, ?, ?)''', data)
@@ -38,55 +39,17 @@ def simulate_try_on(item_name, color, image_url, user_photo):
     #     return response.json()['try_on_image_url']
     return try_on_desc
 
-# Home/Questionnaire page.
+# Home page with filtering and try-on.
 @app.route('/', methods=['GET', 'POST'])
 def home():
+    user_photo = '/uploads/default_avatar.jpg'
     if request.method == 'POST':
-        if 'size' in request.form:  # User shopping
-            size = request.form.get('size', 'M')
-            preferences = request.form.get('preferences', 'plain black, no print, shorts, no shoes, no hat, use photo hat')
+        if 'photo' in request.files:  # Photo upload
             file = request.files.get('photo')
-            user_photo = '/uploads/default_avatar.jpg'
             if file:
                 filename = file.filename
                 file.save(os.path.join(UPLOAD_FOLDER, filename))
                 user_photo = f'/uploads/{filename}'
-            
-            # Algorithm: Filter database based on preferences.
-            cursor.execute('SELECT * FROM clothes')
-            df = pd.DataFrame(cursor.fetchall(), columns=['id', 'name', 'price', 'color', 'sizes', 'image_url', 'affiliate_link', 'brand_story'])
-            filtered = df.copy()
-            pref_list = [p.strip().lower() for p in preferences.split(',')]
-            if 'plain' in pref_list or 'black' in pref_list:
-                filtered = filtered[filtered['color'].str.lower().str.contains('black', na=False)]
-            if 'no print' in pref_list:
-                filtered = filtered[~filtered['name'].str.lower().str.contains('print', na=False)]
-            if 'no shoes' in pref_list:
-                filtered = filtered[~filtered['name'].str.lower().str.contains('shoes', na=False)]
-            if 'shorts' in pref_list:
-                filtered = filtered[filtered['name'].str.lower().str.contains('shorts', na=False)]
-            if 'use photo hat' in pref_list:
-                filtered = filtered[filtered['name'].str.lower().str.contains('hat', na=False)]  # Adjust logic for hat from photo
-            
-            kit = []
-            total_price = 0.0
-            for _, item in filtered.iterrows():
-                if total_price + item['price'] <= 150:  # Cap budget
-                    try_on = simulate_try_on(item['name'], item['color'], item['image_url'], user_photo)
-                    kit.append({
-                        'name': item['name'],
-                        'price': item['price'],
-                        'sizes': item['sizes'].split(','),
-                        'color': item['color'],
-                        'image_url': item['image_url'],
-                        'link': item['affiliate_link'],
-                        'brand_story': item['brand_story'],
-                        'try_on': try_on
-                    })
-                    total_price += item['price']
-            
-            return render_template('index.html', kit=kit, total_price=total_price, user_photo=user_photo)
-        
         elif 'brand_name' in request.form:  # Brand upload
             brand_name = request.form.get('brand_name')
             price = float(request.form.get('price', 0))
@@ -106,12 +69,33 @@ def home():
             conn.commit()
             return redirect(url_for('home'))
 
-    return render_template('index.html')
+    # Fetch all clothes for display.
+    cursor.execute('SELECT * FROM clothes')
+    clothes = pd.DataFrame(cursor.fetchall(), columns=['id', 'name', 'price', 'color', 'sizes', 'image_url', 'affiliate_link', 'brand_story']).to_dict('records')
+
+    # AI filter (simple keyword match from free text).
+    filter_text = request.args.get('filter', '').lower()
+    if filter_text:
+        clothes = [item for item in clothes if any(keyword in item['name'].lower() or item['color'].lower() for keyword in filter_text.split())]
+
+    return render_template('index.html', clothes=clothes, user_photo=user_photo)
 
 # Serve uploaded files.
 @app.route('/uploads/<filename>')
 def uploads(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
+
+# Try-on route for individual items.
+@app.route('/try_on/<int:item_id>', methods=['GET'])
+def try_on(item_id):
+    cursor.execute('SELECT * FROM clothes WHERE id = ?', (item_id,))
+    item = cursor.fetchone()
+    if item:
+        item = dict(zip(['id', 'name', 'price', 'color', 'sizes', 'image_url', 'affiliate_link', 'brand_story'], item))
+        user_photo = request.args.get('user_photo', '/uploads/default_avatar.jpg')
+        try_on_desc = simulate_try_on(item['name'], item['color'], item['image_url'], user_photo)
+        return render_template('try_on.html', item=item, try_on_desc=try_on_desc, user_photo=user_photo)
+    return "Item not found", 404
 
 if __name__ == "__main__":
     app.run(debug=True)
